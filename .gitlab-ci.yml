@@ -1,0 +1,74 @@
+stages:
+  - build
+  - test
+
+image: chilio/laravel-dusk-ci:php-7.4
+
+variables:
+  MYSQL_ROOT_PASSWORD: 12345
+  MYSQL_DATABASE: lutztest
+  APP_ENV: local
+  DB_CONNECTION: mysql
+  DB_HOST: mysql-test
+  DB_PORT: 3306
+  DB_DATABASE: lutztest
+  DB_USERNAME: root
+  DB_PASSWORD: 12345
+
+cache:
+  key: "$CI_COMMIT_REF_SLUG"
+
+build:
+  stage: build
+  script:
+    - composer install --prefer-dist --no-ansi --no-interaction --no-progress --no-scripts
+    - npm install
+    - npm run prod
+  cache:
+    paths:
+      - vendor
+      - node_modules
+  artifacts:
+    paths:
+      - ./public
+    expire_in: 1 days
+    when: always
+
+phpstan:
+  stage: test
+  when: manual
+  dependencies:
+    - build
+  script:
+    - composer install --prefer-dist --no-ansi --no-interaction --no-progress --no-scripts
+    - composer run-phpstan
+  cache:
+    paths:
+      - vendor
+      - node_modules
+
+phpunit:
+  stage: test
+  dependencies:
+    - build
+  services:
+    - name: mysql:5.7
+      alias: mysql-test
+  script:
+    - composer install --prefer-dist --no-ansi --no-interaction --no-progress --no-scripts
+    - configure-laravel
+    - php artisan migrate:fresh --seed
+    - chmod -R 777 ./storage
+    - cp .env.example .env
+    - php artisan key:generate
+    - php artisan env
+    - vendor/bin/phpunit
+  cache:
+    paths:
+      - vendor
+      - node_modules
+  artifacts:
+    paths:
+      - ./storage/logs
+    expire_in: 7 days
+    when: always
